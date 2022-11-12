@@ -13,5 +13,6 @@ int main(int argc, char* argv[])
     std::string base;
     std::cin >> base;
 
+    Sleep(200);
     return 0;
 }
