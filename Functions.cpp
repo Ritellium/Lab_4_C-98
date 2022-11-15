@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <charconv>
 
+#pragma warning (disable:4996)
+
 using namespace MyFunctions;
 
 char* MyFunctions::wchar_to_char(const wchar_t* pwchar)
@@ -56,15 +58,13 @@ void MyFunctions::sendMessage(FILE* file, const char* message)
 
 void MyFunctions::readMessage(FILE* file, char* readHere)
 {
-	if (readHere != nullptr)
-	{
-		delete[] readHere;
-	}
 	int length = 0;
 	fread(&length, sizeof(length), 1, file);
-	readHere = new char[length];
+	char* destination = new char[length];
 	for (int i = 0; i < length; i++)
 	{
-		fread(&readHere[i], sizeof(char), 1, file);
+		fread(&destination[i], sizeof(char), 1, file);
 	}
+	strcpy(readHere, destination);
+	delete[] destination;
 }

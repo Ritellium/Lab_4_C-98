@@ -44,18 +44,40 @@ int main(int argc, char* argv[])
 	printf("input number of Sender processes: ");
 	scanf_s("%d", &sendersEmount);
 
-	// Senders work
+	HANDLE* senders_ready = new HANDLE[sendersEmount];
+	HANDLE someone_reads;
 
+	LPWSTR* name1 = new LPWSTR[sendersEmount];
+	for (int i = 0; i < sendersEmount; i++)
+	{
+		std::wstring s = std::to_wstring(i + 1);
+		const wchar_t* senderNum = s.c_str();
+
+		name1[i] = new wchar_t[40];
+		wcscpy(name1[i], L"sender_ready_");
+		senders_ready[i] = CreateEvent(nullptr, FALSE, FALSE, wcscat(name1[i], senderNum));
+		printf_s("%ls\n", name1);
+	} 
+	wchar_t name2[] = L"someone_reads";
+	someone_reads = CreateEvent(nullptr, FALSE, FALSE, name2);
+	
+	// Events initialization 
+
+	// Senders work
 	auto SenderAllocation = new wchar_t[40];
 	wcscpy(SenderAllocation, L"Sender.exe");
 	wcscat(SenderAllocation, L" ");
 	wcscat(SenderAllocation, file_name);
+	wcscat(SenderAllocation, L" ");
 
 	auto* data = new LPWSTR[sendersEmount];
 	for (int i = 0; i < sendersEmount; i++)
 	{
 		data[i] = new wchar_t[40];
 		wcscpy(data[i], SenderAllocation);
+		std::wstring s = std::to_wstring(i + 1);
+		const wchar_t* senderNum = s.c_str();
+		wcscat(data[i], senderNum);
 	}
 
 	auto* senders_StartInf = new _STARTUPINFOW[sendersEmount];
@@ -81,15 +103,9 @@ int main(int argc, char* argv[])
 			printf("The Sender %d is runned.\n", (i + 1));
 		}
 	}
+	SetEvent(someone_reads);
 
-	for (int i = 0; i < sendersEmount; i++)
-	{
-		WaitForSingleObject(senders_PrInf[i].hProcess, INFINITE);
-
-		CloseHandle(senders_PrInf[i].hThread);
-		CloseHandle(senders_PrInf[i].hProcess);
-	}
-
+	WaitForMultipleObjects(sendersEmount, senders_ready, true, INFINITE);
 	// Вывод бинарника на консоль
 
 	error_file = fopen_s(&file_bin, MyFunctions::wchar_to_char(file_name), "rb");
@@ -98,15 +114,33 @@ int main(int argc, char* argv[])
 		printf("Error opening file");
 		return 0;
 	}
-	fseek(file_bin, 0, SEEK_SET);
+
+	char* readed_message = new char[30];
+	printf("Messages: \n");
+	for (int i = 0; i < sendersEmount; i++)
+	{
+		MyFunctions::readMessage(file_bin, readed_message);
+		printf("%s\n", readed_message);
+	}
 
 	fclose(file_bin);
 
 	// Конец вывода бинарника
 
+	for (int i = 0; i < sendersEmount; i++)
+	{
+		CloseHandle(senders_PrInf[i].hThread);
+		CloseHandle(senders_PrInf[i].hProcess);
+	}
+
 	// Чистка
 
-	//delete[] file_name; ? this just don't work
+	delete[] senders_ready;
+	for (int i = 0; i < sendersEmount; i++)
+	{
+		delete[] name1[i];
+	}
+	delete[] name1;
 	delete[] SenderAllocation;
 	for (int i = 0; i < sendersEmount; i++)
 	{
