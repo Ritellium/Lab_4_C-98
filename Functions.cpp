@@ -12,7 +12,42 @@
 
 using namespace MyFunctions;
 
-char* MyFunctions::wchar_to_char(const wchar_t* pwchar)
+void MyFunctions::sendMessage(FILE* file, const char* message)
+{
+	int length = strlen(message) + 1;
+	fwrite(&length, sizeof(length), 1, file);
+	for (int i = 0; i < length; i++)
+	{
+		fwrite(&message[i], sizeof(char), 1, file);
+	}
+}
+
+void MyFunctions::readMessage(FILE* file, char* readHere)
+{
+	int length = 0;
+	fread(&length, sizeof(length), 1, file);
+	char* destination = new char[length];
+	for (int i = 0; i < length; i++)
+	{
+		fread(&destination[i], sizeof(char), 1, file);
+	}
+	strcpy(readHere, destination);
+	delete[] destination;
+}
+
+bool MyFunctions::all_zero(const int* threads, int emount)
+{
+	for (size_t i = 0; i < emount; i++)
+	{
+		if (threads[i] == 1)
+		{
+			return false;
+		}
+	}
+	return true;
+} // Function checks if all threads are stopped. If yes -- returns true. else -- false
+
+/*char* MyFunctions::wchar_to_char(const wchar_t* pwchar)
 {
 	// get the number of characters in the string.
 	int currentCharIndex = 0;
@@ -53,27 +88,4 @@ wchar_t* MyFunctions::GetWC(const char* c)
 	mbstowcs(wc, c, cSize);
 
 	return wc;
-}
-
-void MyFunctions::sendMessage(FILE* file, const char* message)
-{
-	int length = strlen(message) + 1;
-	fwrite(&length, sizeof(length), 1, file);
-	for (int i = 0; i < length; i++)
-	{
-		fwrite(&message[i], sizeof(char), 1, file);
-	}
-}
-
-void MyFunctions::readMessage(FILE* file, char* readHere)
-{
-	int length = 0;
-	fread(&length, sizeof(length), 1, file);
-	char* destination = new char[length];
-	for (int i = 0; i < length; i++)
-	{
-		fread(&destination[i], sizeof(char), 1, file);
-	}
-	strcpy(readHere, destination);
-	delete[] destination;
-}
+}*/

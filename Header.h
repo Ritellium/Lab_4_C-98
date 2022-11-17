@@ -10,11 +10,13 @@
 
 namespace MyFunctions
 {
-	char* wchar_to_char(const wchar_t* pwchar);
-
-	wchar_t* GetWC(const char* c);
-
 	void sendMessage(FILE* file, const char* message);
 
 	void readMessage(FILE* file, char* readHere);
+
+	bool all_zero(const int* threads, int emount);
+
+	/*char* wchar_to_char(const wchar_t* pwchar);
+
+	wchar_t* GetWC(const char* c);*/
 }
