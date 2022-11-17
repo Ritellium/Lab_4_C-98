@@ -34,7 +34,7 @@ int main(int argc, char* argv[])
 		printf("Error opening file");
 		return 0;
 	}
-	fclose(file_bin);
+	fclose(file_bin); // just file creation (and check of input)
 
 	int stringsEmount = 0;
 	printf("input number of strings in .bin file: ");
@@ -45,43 +45,70 @@ int main(int argc, char* argv[])
 	scanf_s("%d", &sendersEmount);
 
 	HANDLE* senders_ready = new HANDLE[sendersEmount];
-	HANDLE someone_reads;
+	HANDLE* continue_work = new HANDLE[sendersEmount];
+	HANDLE* end_work = new HANDLE[sendersEmount];
+	HANDLE string_counter;
+	HANDLE senders_counter;
 
-	LPWSTR* name1 = new LPWSTR[sendersEmount];
+	LPWSTR* names_senders_ready = new LPWSTR[sendersEmount];
+	LPWSTR* names_continue_work = new LPWSTR[sendersEmount];
+	LPWSTR* names_end_work = new LPWSTR[sendersEmount];
+
+	// Events initialization 
 	for (int i = 0; i < sendersEmount; i++)
 	{
 		std::wstring s = std::to_wstring(i + 1);
 		const wchar_t* senderNum = s.c_str();
 
-		name1[i] = new wchar_t[40];
-		wcscpy(name1[i], L"sender_ready_");
-		senders_ready[i] = CreateEvent(nullptr, FALSE, FALSE, wcscat(name1[i], senderNum));
-		printf_s("%ls\n", name1);
+		names_senders_ready[i] = new wchar_t[40];
+		wcscpy(names_senders_ready[i], L"sender_ready_");
+		wcscat(names_senders_ready[i], senderNum);
+		names_continue_work[i] = new wchar_t[40];
+		wcscpy(names_continue_work[i], L"continue_work_");
+		wcscat(names_continue_work[i], senderNum);
+		names_end_work[i] = new wchar_t[40];
+		wcscpy(names_end_work[i], L"end_work_");
+		wcscat(names_end_work[i], senderNum);
+
+		senders_ready[i] = CreateEventW(nullptr, FALSE, FALSE, names_senders_ready[i]);
+		continue_work[i] = CreateEventW(nullptr, FALSE, FALSE, names_continue_work[i]);
+		end_work[i] = CreateEventW(nullptr, FALSE, FALSE, names_end_work[i]);
 	} 
-	wchar_t name2[] = L"someone_reads";
-	someone_reads = CreateEvent(nullptr, FALSE, FALSE, name2);
-	
-	// Events initialization 
+	wchar_t name_str_counter[] = L"string_counter";
+	wchar_t name_sender_counter[] = L"senders_counter";
+	string_counter = CreateSemaphoreW(nullptr, 0, stringsEmount, name_str_counter);
+	ReleaseSemaphore(string_counter, stringsEmount, NULL);
+	senders_counter = CreateSemaphoreW(nullptr, 0, sendersEmount, name_sender_counter);
 
 	// Senders work
 	auto SenderAllocation = new wchar_t[40];
-	wcscpy(SenderAllocation, L"Sender.exe");
+	wcscpy(SenderAllocation, L"Sender.exe"); // argv[0]
 	wcscat(SenderAllocation, L" ");
-	wcscat(SenderAllocation, file_name);
-	wcscat(SenderAllocation, L" ");
+	wcscat(SenderAllocation, file_name); // argv[1]
 
 	auto* data = new LPWSTR[sendersEmount];
 	for (int i = 0; i < sendersEmount; i++)
 	{
-		data[i] = new wchar_t[40];
+		data[i] = new wchar_t[150];
 		wcscpy(data[i], SenderAllocation);
 		std::wstring s = std::to_wstring(i + 1);
 		const wchar_t* senderNum = s.c_str();
-		wcscat(data[i], senderNum);
+		wcscat(data[i], L" ");
+		wcscat(data[i], names_senders_ready[i]); // argv[2]
+		wcscat(data[i], L" ");
+		wcscat(data[i], names_continue_work[i]); // argv[3]
+		wcscat(data[i], L" ");
+		wcscat(data[i], names_end_work[i]); // argv[4]
+		wcscat(data[i], L" ");
+		wcscat(data[i], name_str_counter); // argv[5]
+		wcscat(data[i], L" ");
+		wcscat(data[i], name_sender_counter); // argv[6]
+		wcscat(data[i], L" ");
+		wcscat(data[i], senderNum); // argv[7]
 	}
 
-	auto* senders_StartInf = new _STARTUPINFOW[sendersEmount];
-	auto* senders_PrInf = new _PROCESS_INFORMATION[sendersEmount];
+	_STARTUPINFOW* senders_StartInf = new _STARTUPINFOW[sendersEmount];
+	_PROCESS_INFORMATION* senders_PrInf = new _PROCESS_INFORMATION[sendersEmount];
 
 	for(int i=0; i<sendersEmount; i++)
 	{
@@ -96,6 +123,23 @@ int main(int argc, char* argv[])
 			CREATE_NEW_CONSOLE, nullptr, nullptr, &senders_StartInf[i], &senders_PrInf[i]))
 		{
 			printf("The Sender %d is not created. Process stopping...\n", (i + 1));
+			// Чистка
+			{
+				delete[] SenderAllocation;
+
+				delete[] names_end_work;
+				delete[] names_continue_work;
+				delete[] names_senders_ready;
+
+				delete[] end_work;
+				delete[] continue_work;
+				delete[] senders_ready;
+
+				delete[] data;
+
+				delete[] senders_StartInf;
+				delete[] senders_PrInf;
+			}// Чистка
 			return 0;
 		}
 		else
@@ -103,52 +147,81 @@ int main(int argc, char* argv[])
 			printf("The Sender %d is runned.\n", (i + 1));
 		}
 	}
-	SetEvent(someone_reads);
 
-	WaitForMultipleObjects(sendersEmount, senders_ready, true, INFINITE);
-	// Вывод бинарника на консоль
-
-	error_file = fopen_s(&file_bin, MyFunctions::wchar_to_char(file_name), "rb");
-	if (error_file != 0)
+	int action = 0;
+	do
 	{
-		printf("Error opening file");
-		return 0;
-	}
+		WaitForMultipleObjects(sendersEmount, senders_ready, true, INFINITE);
 
-	char* readed_message = new char[30];
-	printf("Messages: \n");
-	for (int i = 0; i < sendersEmount; i++)
-	{
-		MyFunctions::readMessage(file_bin, readed_message);
-		printf("%s\n", readed_message);
-	}
+		printf("<1> to read messages, <other> to end work : \n");
+		scanf_s("%d", &action);
 
-	fclose(file_bin);
+		int semaphores_on = 0;
 
-	// Конец вывода бинарника
+		if (action == 1)
+		{
+			fopen_s(&file_bin, MyFunctions::wchar_to_char(file_name), "rb");
 
-	for (int i = 0; i < sendersEmount; i++)
-	{
-		CloseHandle(senders_PrInf[i].hThread);
-		CloseHandle(senders_PrInf[i].hProcess);
-	}
+			char* readed_message = new char[30];
+			printf("Messages: \n");
 
+			while(WaitForSingleObject(senders_counter, 20) != WAIT_TIMEOUT)
+			{
+				MyFunctions::readMessage(file_bin, readed_message);
+				printf("%s\n", readed_message);
+				semaphores_on++;
+			}
+
+			delete[] readed_message;
+			fclose(file_bin);
+
+			ReleaseSemaphore(string_counter, stringsEmount, NULL);
+			for (int i = 0; i < sendersEmount; i++)
+			{
+				SetEvent(continue_work[i]);
+			}
+		}
+
+		if (action != 1 || semaphores_on < stringsEmount)
+		{
+			if (semaphores_on < stringsEmount)
+			{
+				printf("There are no more working senders, process stopping...");
+			}
+			for (int i = 0; i < sendersEmount; i++)
+			{
+				SetEvent(continue_work[i]);
+				Sleep(5);
+				SetEvent(end_work[i]);
+				Sleep(25);
+				CloseHandle(senders_PrInf[i].hThread);
+				CloseHandle(senders_PrInf[i].hProcess);
+			}			
+			break;
+		}
+
+		fopen_s(&file_bin, MyFunctions::wchar_to_char(file_name), "wb");
+		fclose(file_bin);
+		printf("Now waiting for messages\n");
+		Sleep(200);
+
+	} while (true);
 	// Чистка
-
-	delete[] senders_ready;
-	for (int i = 0; i < sendersEmount; i++)
 	{
-		delete[] name1[i];
-	}
-	delete[] name1;
-	delete[] SenderAllocation;
-	for (int i = 0; i < sendersEmount; i++)
-	{
-		delete[] data[i];
-	}
-	delete[] data;
-	delete[] senders_StartInf;
-	delete[] senders_PrInf;
+		delete[] SenderAllocation;
 
+		delete[] names_end_work;
+		delete[] names_continue_work;
+		delete[] names_senders_ready;
+
+		delete[] end_work;
+		delete[] continue_work;
+		delete[] senders_ready;
+
+		delete[] data;
+
+		delete[] senders_StartInf;
+		delete[] senders_PrInf;
+	}
 	return 0;
 }

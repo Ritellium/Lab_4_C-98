@@ -46,6 +46,15 @@ char* MyFunctions::wchar_to_char(const wchar_t* pwchar)
 	return filePathC;
 }
 
+wchar_t* MyFunctions::GetWC(const char* c)
+{
+	const size_t cSize = strlen(c) + 1;
+	wchar_t* wc = new wchar_t[cSize];
+	mbstowcs(wc, c, cSize);
+
+	return wc;
+}
+
 void MyFunctions::sendMessage(FILE* file, const char* message)
 {
 	int length = strlen(message) + 1;

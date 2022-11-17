@@ -13,37 +13,41 @@ int main(int argc, char* argv[])
 {
     FILE* file_bin;
     errno_t error_file;
-    char* file_name = argv[1];
-    printf("I'm Sender number %d, type below to sent messages\n", atoi(argv[2]));
+    char* file_name = (argv[1]);
+    printf("I'm Sender number %s, type below to sent messages\n", argv[7]);
 
-    wchar_t* name11 = new wchar_t[30];
-    wcscpy(name11, L"sender_ready_");
-    wchar_t* name33 = new wchar_t[30];
-    wcscpy(name33, L"someone_reads");
+    LPCWSTR name_senders_ready = MyFunctions::GetWC(argv[2]);
+    LPCWSTR name_continue_work = MyFunctions::GetWC(argv[3]);
+    LPCWSTR name_end_work = MyFunctions::GetWC(argv[4]);
+    LPCWSTR string_counter = MyFunctions::GetWC(argv[5]);
+    LPCWSTR senders_counter = MyFunctions::GetWC(argv[6]);
 
-    std::wstring s = std::to_wstring(atoi(argv[2]));
-    const wchar_t* senderNum = s.c_str();
+    HANDLE this_ready = OpenEventW(EVENT_ALL_ACCESS, EVENT_MODIFY_STATE, name_senders_ready);
+    HANDLE continue_work = OpenEventW(EVENT_ALL_ACCESS, EVENT_MODIFY_STATE, name_continue_work);
+    HANDLE end_work = OpenEventW(EVENT_ALL_ACCESS, EVENT_MODIFY_STATE, name_end_work);
+    HANDLE semaphore_string = OpenSemaphoreW(SEMAPHORE_ALL_ACCESS, SEMAPHORE_MODIFY_STATE, string_counter);
+    HANDLE semaphore_senders = OpenSemaphoreW(SEMAPHORE_ALL_ACCESS, SEMAPHORE_MODIFY_STATE, senders_counter);
 
-    HANDLE this_ready = OpenEvent(EVENT_ALL_ACCESS, EVENT_MODIFY_STATE, wcscat(name11, senderNum));
-    HANDLE critsec_access = OpenEvent(EVENT_ALL_ACCESS, EVENT_MODIFY_STATE, name33);
-
-    if (this_ready == nullptr || critsec_access == nullptr)
+    if (this_ready == nullptr || semaphore_string == nullptr || semaphore_senders == nullptr || continue_work == nullptr || end_work == nullptr)
     {
-        printf("Wrong HANDLEs of events");
+        printf("Wrong HANDLEs of sync objects");
+
+        delete[] file_name;
+
         return 0;
     }
 
-    printf_s("%ls\n", name11);
     int action = 0;
+    bool stopped = false;
+
     do
     {
-        WaitForSingleObject(critsec_access, INFINITE);
-
-        try_again:
-        printf(" <1> to input message to send (maximum 20 symbols), <0> to end work : \n");
-        scanf_s("%d", &action);
-
-        if (action == 1)
+        if (!stopped)
+        {
+            printf("<1> to input message, <other> to end work : \n");
+            scanf_s("%d", &action);
+        }
+        if (action == 1 && !stopped)
         {
             error_file = fopen_s(&file_bin, file_name, "ab");
             if (error_file != 0)
@@ -52,27 +56,52 @@ int main(int argc, char* argv[])
                 return 0;
             }
             auto message = new char[21];
-            printf("Enter the message\n");
+            printf("Enter the message (maximum 20 symbols)\n");
             scanf_s("%s", message, 20);
-            MyFunctions::sendMessage(file_bin, message);
 
-            fclose(file_bin);
-            SetEvent(this_ready);
-            SetEvent(critsec_access);
-            break;
+            if (WaitForSingleObject(semaphore_string, 50) == WAIT_TIMEOUT)
+            {
+                printf("The file is full\n");
+                delete[] message;
+                SetEvent(this_ready);
+                fclose(file_bin);
+                WaitForSingleObject(continue_work, INFINITE);
+                if (WaitForSingleObject(end_work, 50) == WAIT_TIMEOUT)
+                {
+                    continue;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            else
+            {
+                ReleaseSemaphore(semaphore_senders, 1, NULL);
+                MyFunctions::sendMessage(file_bin, message);
+                delete[] message;
+                fclose(file_bin);
+                continue;
+            }
         }
-        else if (action == 0)
+        else if (action != 1 || stopped)
         {
-            printf("Stopping process...\n");
+            if (!stopped)
+            {
+                printf("Process stopped.\n");
+            }
+            stopped = true;
             SetEvent(this_ready);
-            SetEvent(critsec_access);
-            break;
+            WaitForSingleObject(continue_work, INFINITE);
+            if (WaitForSingleObject(end_work, 50) == WAIT_TIMEOUT)
+            {
+                continue;
+            }
+            else
+            {
+                break;
+            }
         }     
-        else
-        {
-            printf("wrong input, try again: \n");
-            goto try_again;
-        }
     } while (true);
 
     Sleep(500);
